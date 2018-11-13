@@ -82,7 +82,7 @@ void State::startled(uint8_t strength, uint8_t id) {
     uint32_t lastTime = _creature.getLastStartle();
     uint8_t oldTh = _creature._startleThreshold;
     _creature._startleThreshold = oldTh - oldTh * (time - lastTime) * STARTLE_THRESHOLD_DECAY * this->getStartleFactor();
-    if (strength >= ) { // what is state.threshold();????
+    if (strength >= ) { // what is state.threshold();?????
       _creature->_transition(new Startle(_creature));
       this->txStartle(strength, id);
       _creature._lastStartleId = id;
