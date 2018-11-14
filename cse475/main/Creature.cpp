@@ -127,7 +127,10 @@ bool Creature::_rx(uint8_t pid, uint8_t srcAddr, uint8_t len, uint8_t* payload, 
 }
 
 void Creature::_updateDistance(uint8_t addr, int8_t rssi) {
-  _creatureDistances[addr] = rssi;
+  double simV = 0.5;
+  int8_t oldRssi = _creatureDistances[addr];
+  int8_t aveSim = (int8_t)(simV * oldRssi + (1 - simV) * rssi);
+  _creatureDistances[addr] = aveSim;
 }
 
 bool Creature::_rxSetGlobals(uint8_t len, uint8_t* payload) {
