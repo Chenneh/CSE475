@@ -1,21 +1,16 @@
 #include "Startle.h"
-#include "Neopixel.h"
 #include "Debug.h"
+//#include "Midi.h"
 
 constexpr uint8_t Startle::_localWeights[];
 
 uint8_t Startle::getNumRepeats() {
- return 32;
-}
-
-State* Startle::transition() {
-  Midi::setSound(Midi::getSound() ? 0 : 1);
-  Neopixel::setLight(Neopixel::getLight() ? 0 : 1);
-  return this;
+ //return rand() % 4 + 1; // 1 - 4
+ return 2;
 }
 
 void Startle::loop(uint32_t dt) {
-//  dprintln(F("Startleing..."));
+  Neopixel::setLight(8);
 }
 
 const uint8_t* Startle::getLocalWeights() {
@@ -23,11 +18,11 @@ const uint8_t* Startle::getLocalWeights() {
 }
 
 float Startle::getStartleFactor() {
-  return STARLE_FACTOR;
+  return 9999999999;
 }
 
-void Startle::PIR() {
-  dprintln("PIR triggered!");
-}
+bool Startle::rxStartle(uint8_t len, uint8_t* payload) {}
 
-void Startle::startled(uint8_t strength, uint8_t id) {}
+void Startle::PIR() {}
+
+void Startle::startled() {}

@@ -1,5 +1,6 @@
 #include "Creature.h"
 #include "State.h"
+#include "Startle.h"
 
 State::State(Creature& creature, char* const name, const uint8_t id) : _creature(creature), _id(id) {
   strncpy(_name, name, MAX_NAME_LEN);
@@ -15,80 +16,179 @@ char* State::getName() {
 }
 
 void State::playSound(uint8_t sound_idx) {
-  // TODO: implement
+  switch (sound_idx) {
+    case 0:
+      Serial.println("Playing sound 0...");
+      Midi::setSound(sound_idx + 1);
+    case 1:
+      Serial.println("Playing sound 1...");
+      Midi::setSound(sound_idx + 1);
+    case 2:
+      Serial.println("Playing sound 2...");
+      Midi::setSound(sound_idx + 1);
+    case 3:
+      Serial.println("Playing sound 3...");
+      Midi::setSound(sound_idx + 1);
+    case 4:
+      Serial.println("Playing sound 4...");
+      Midi::setSound(sound_idx + 1);
+    case 5:
+      Serial.println("Playing sound 5...");
+      Midi::setSound(sound_idx + 1);
+    case 6:
+      Serial.println("Playing sound 6...");
+      Midi::setSound(sound_idx + 1);
+    case 7:
+      Serial.println("Playing sound 7...");
+      Midi::setSound(sound_idx + 1);
+    default:
+      Serial.print("No sound of ID ");
+      Serial.println(sound_idx);
+  }
 }
 
 void State::playEffect(uint8_t effect_idx) {
-  // TODO: implement
+  switch (effect_idx) {
+    case 0:
+      Serial.println("Playing effect 0...");
+      Neopixel::setLight(effect_idx + 1);
+    case 1:
+      Serial.println("Playing effect 1...");
+      Neopixel::setLight(effect_idx + 1);
+    case 2:
+      Serial.println("Playing effect 2...");
+      Neopixel::setLight(effect_idx + 1);
+    case 3:
+      Serial.println("Playing effect 3...");
+      Neopixel::setLight(effect_idx + 1);
+    case 4:
+      Serial.println("Playing effect 4...");
+      Neopixel::setLight(effect_idx + 1);
+    case 5:
+      Serial.println("Playing effect 5...");
+      Neopixel::setLight(effect_idx + 1);
+    case 6:
+      Serial.println("Playing effect 6...");
+      Neopixel::setLight(effect_idx + 1);
+    case 7:
+      Serial.println("Playing effect 7...");
+      Neopixel::setLight(effect_idx + 1);
+    default:
+      Serial.print("No effect of ID ");
+      Serial.println(effect_idx);
+  }
 }
 
 bool State::rxPlaySound(uint8_t len, uint8_t* payload) {
-  // TODO: implement
-}
-
-bool State::rxPlayEffect(uint8_t len, uint8_t* payload) {
-  // TODO: implement
-}
-
-bool State::rxStartle(int8_t rssi, uint8_t len, uint8_t* payload) {
-  int8_t param =  (STARTLE_DECAY - rssi) / STARTLE_DECAY;
-  int8_t func = 1 / (1 + exp((-1) * param));
-  int8_t decay = func * this->getStartleFactor;
-  this->startled(decay * payload[0], playload[1]);
+  if (len < 1) {
+    return false;
+  }
+  playSound(payload[0]);
   return true;
 }
 
-void State::txStartle(uint8_t strength, uint8_t id) {
-  uint8_t payload[] = {strength, id};
-  _creature.tx(PID_STARTLE, BROADCAST_ADDR, sizeof(payload), payload);
+bool State::rxPlayEffect(uint8_t len, uint8_t* payload) {
+  if (len < 1) {
+    return false;
+  }
+  playEffect(payload[0]);
+  return true;
 }
 
-State* State::transition() {
-  const uint8_t *localWeights = this->getLocalWeights();
-  double norm_localWeights[7];
-  int sum = 0;
-  for (int i = 0; i < 7; i++) {
-    norm_localWeights[i] = sum + localWeights[i];
-    sum += localWeights[i];
+bool State::rxStartle(int8_t rssi, uint8_t len, uint8_t* payload) {
+  if (len != 2) {
+    return false;
   }
-  for (int i = 0; i < 7; i++) {
-    norm_localWeights[i] = norm_localWeights[i] / sum;
-  }
+  uint8_t strength = payload[0];
+  uint8_t id = payload[1];
 
-  int r = rand() / (RAND_MAX + 1.);
-  int next_state_id = 0;
-  for (int i = 0; i < 7; i++) {
-    if (norm_localWeights[i] < r) {
-      next_state_id++;
-    }
-  }
-  switch(next_state_id) {
-    case 1: return new Ambient_1(_creature); break;
-    case 2: return new Active_1(_creature); break;
-    case 3: return new Ambient_2(_creature); break;
-    case 4: return new Active_2(_creature); break;
-    case 5: return new Ambient_3(_creature); break;
-    case 6: return new Active_3(_creature); break;
-  }
+  uint8_t decayStrength = strength;
+  float decay = (1.f / (1.f + exp((-_creature.GLOBALS.STARTLE_DECAY - rssi) / (float) _creature.GLOBALS.STARTLE_DECAY))) * getStartleFactor();
+  strength = (uint8_t) round(decay * strength);
+
+  startled(strength, id);
+}
+
+void State::txStartle(uint8_t strength, uint8_t id) {
+  uint8_t pld[2];
+  pld[0] = strength;
+  pld[1] = id;
+  _creature.tx(6, 255, 2, pld);
 }
 
 void State::PIR() {
-  // TODO: implement
+  uint8_t id = rand() % 256;
+  uint8_t strength = min(255, (rand() % (_creature.GLOBALS.STARTLE_RAND_MAX - _creature.GLOBALS.STARTLE_RAND_MIN + 1) + _creature.GLOBALS.STARTLE_RAND_MIN) * (1.f - (255.f / _creature.GLOBALS.STARTLE_THRESHOLD) * 0.5 + 1.f));
+
+  startled(strength, id);
 }
 
 void State::startled(uint8_t strength, uint8_t id) {
-  if (id != _creature.getLastStartleId()) {
-    uint32_t time = millis();
-    uint32_t lastTime = _creature.getLastStartle();
-    uint8_t oldTh = _creature._startleThreshold;
-    _creature._startleThreshold = oldTh - oldTh * (time - lastTime) * STARTLE_THRESHOLD_DECAY * this->getStartleFactor();
-    if (strength >= ) { // what is state.threshold();??????
-      _creature->_transition(new Startle(_creature));
-      this->txStartle(strength, id);
-      _creature._lastStartleId = id;
+  uint8_t last = _creature.getLastStartleId();
+  if (id != last) {
+    _creature.updateThreshold();
+    if (strength >= _creature.getStartleThreshold()) {
+      _creature.setNextState(new Startle(_creature));
+      txStartle(strength, id);
+      _creature.setLastStartleId(id);
+      _creature.setStartleThreshold(255);
     }
-    _creature._lastStartle = time;
   }
+}
+
+State* State::transition() {
+
+  // Get total number of active creatures (i.e. they've recently communicated & are not in Wait or Startle)
+  // Get the total number of creatures in each state
+  // Get the total sum of the inverse absolute value of the RSSI
+  uint8_t numActiveCreature = 0;
+  uint8_t stateSums[ACTIVE_STATES + AMBIENT_STATES] = { 0 };
+  float distanceStateSums[ACTIVE_STATES + AMBIENT_STATES] = { 0 };
+  for (uint8_t i = 1; i < _creature.GLOBALS.NUM_CREATURES + 1; i++) {
+    if (_creature.getCreatureStates()[i] > 0 && _creature.getCreatureStates()[i] <= (ACTIVE_STATES + AMBIENT_STATES)) {
+      numActiveCreature += 1;
+      float creatureInverseDistance = _creature.getCreatureDistances()[i] ? -1.f / _creature.getCreatureDistances()[i] : 0;
+      stateSums[_creature.getCreatureStates()[i] - 1] += 1;
+      distanceStateSums[_creature.getCreatureStates()[i] - 1] += creatureInverseDistance;
+    }
+  }
+
+  // Calculate the global scalar values taking into account the states of other creatures
+  float stateGlobalScalars[ACTIVE_STATES + AMBIENT_STATES] = { 0 };
+  for (uint8_t i = 0; i < ACTIVE_STATES + AMBIENT_STATES; i++) {
+    stateGlobalScalars[i] = numActiveCreature ? _globalWeights[i] * ((numActiveCreature - stateSums[i]) / (float) numActiveCreature) : 0;
+  }
+
+  float stateLikelihoods[ACTIVE_STATES + AMBIENT_STATES] = { 0 };
+  for (uint8_t i = 0; i < ACTIVE_STATES + AMBIENT_STATES; i++) {
+    stateLikelihoods[i] = getLocalWeights()[i] + stateGlobalScalars[i] * distanceStateSums[i];
+  }
+
+  Serial.print(stateLikelihoods[0]);
+  Serial.print("\t");
+  for (uint8_t i = 1; i < ACTIVE_STATES + AMBIENT_STATES; i++) {
+    stateLikelihoods[i] += stateLikelihoods[i - 1];
+    Serial.print(stateLikelihoods[i]);
+    Serial.print("\t");
+  }
+  Serial.println();
+
+  float randomVal = static_cast <float> (rand()) / ( static_cast <float> (RAND_MAX / (stateLikelihoods[ACTIVE_STATES + AMBIENT_STATES - 1])));
+
+  uint8_t stateID = 0;
+  for (uint8_t i = 0; i < ACTIVE_STATES + AMBIENT_STATES; i++) {
+    if (randomVal < stateLikelihoods[i]) {
+      stateID = i + 1;
+      break;
+    }
+  }
+
+  Serial.print(randomVal);
+  Serial.print(" --> ");
+  Serial.println(stateID);
+
+
+  return _creature.getState(stateID);
 }
 
 int8_t* State::getGlobalWeights() {

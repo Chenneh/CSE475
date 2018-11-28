@@ -2,15 +2,22 @@
 #include "Debug.h"
 #include "State.h"
 #include "Wait.h"
+#include "Active1.h"
+#include "Active2.h"
+#include "Active3.h"
+#include "Ambient1.h"
+#include "Ambient2.h"
+#include "Ambient3.h"
+#include "Startle.h"
 #include "Midi.h"
 #include "Neopixel.h"
 
 #include <cmath>
 
 // TODO: put your kit number here
-#define KIT_NUM 100
+#define KIT_NUM 7
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 
 // Returns current battery voltage
 inline float getBatteryVoltage() {
@@ -20,7 +27,7 @@ inline float getBatteryVoltage() {
 
 Creature::Creature() {
   // Initialize _next to be the Wait state, so we will immediately transition into it on the first loop.
-  _next = new Wait(*this);
+  _next = new Ambient1(*this);
   _prev = _state = nullptr;
 
   if (KIT_NUM < 0) {
@@ -38,6 +45,7 @@ Creature::Creature() {
   _creatureStates = new uint8_t[GLOBALS.NUM_CREATURES + 1]();
 
   _battery = getBatteryVoltage();
+  srand(_addr * (_battery * 100));
 
   _lastStartle = millis();
   _lastLoop = millis();
@@ -52,6 +60,24 @@ void Creature::loop() {
   // Only trigger state loops and transitions every CYCLE_TIME ms
   if (dt > GLOBALS.CYCLE_TIME) {
     _updateDisplay();
+
+    // Uncomment to see all the current states & distances for creatures
+    /*for (int i = 0; i < GLOBALS.NUM_CREATURES + 1; i++) {
+      Serial.print(_creatureStates[i]);
+      Serial.print("\t");
+    }
+    Serial.println();
+
+    for (int i = 0; i < GLOBALS.NUM_CREATURES + 1; i++) {
+      Serial.print(_creatureDistances[i]);
+      Serial.print("\t");
+    }
+    Serial.println();*/
+
+    dprint("Threshold: ");
+    dprint(_startleThreshold);
+    dprint("/");
+    dprintln("255");
 
     if (_next != NULL) {
       // We have a predefined next state, transition immediately
@@ -89,36 +115,25 @@ bool Creature::_rx(uint8_t pid, uint8_t srcAddr, uint8_t len, uint8_t* payload, 
   _rxCount++;
   _updateDistance(srcAddr, rssi);
 
-  // TODO: implement to call appropriate state functions.
   switch (pid) {
     case PID_SET_GLOBALS:
       if (srcAddr != CONTROLLER_ADDR) return false;
-      _rxSetGlobals(len, payload);
-      return true;
+      return _rxSetGlobals(len, payload);
     case PID_STOP:
       if (srcAddr != CONTROLLER_ADDR) return false;
       _rxStop();
       return true;
     case PID_START:
       if (srcAddr != CONTROLLER_ADDR) return false;
-      _rxStart(len, payload);
-      return true;
+      return _rxStart(len, payload);
     case PID_PLAY_SOUND:
-      if (srcAddr != CONTROLLER_ADDR) return false;
-      // TODO: Implement
-      return true;
+      return _state->rxPlaySound(len, payload);
     case PID_PLAY_EFFECT:
-      if (srcAddr != CONTROLLER_ADDR) return false;
-      // TODO: Implement
-      return true;
+      return _state->rxPlayEffect(len, payload);
     case PID_BROADCAST_STATES:
-      if (srcAddr != CONTROLLER_ADDR) return false;
-      _rxBroadcastStates(len, payload);
-      return true;
+      return _rxBroadcastStates(len, payload);
     case PID_STARTLE:
-      if (srcAddr != CONTROLLER_ADDR) return false;
-      _state->Startled();
-      return true;
+      return _state->rxStartle(rssi, len, payload);
     default:
       Serial.print(F("Received packet of unknown type: "));
       Serial.print(pid, HEX);
@@ -127,10 +142,20 @@ bool Creature::_rx(uint8_t pid, uint8_t srcAddr, uint8_t len, uint8_t* payload, 
 }
 
 void Creature::_updateDistance(uint8_t addr, int8_t rssi) {
-  double simV = 0.5;
-  int8_t oldRssi = _creatureDistances[addr];
-  int8_t aveSim = (int8_t)(simV * oldRssi + (1 - simV) * rssi);
-  _creatureDistances[addr] = aveSim;
+  if (addr <= GLOBALS.NUM_CREATURES) {
+    // Update gradually so we don't move too much
+    _creatureDistances[addr] = _creatureDistances[addr] * DISTANCE_ALPHA + rssi * (1 - DISTANCE_ALPHA);
+  }
+}
+
+uint8_t Creature::updateThreshold() {
+  uint8_t delta = getStartleThreshold() * (millis() - getLastStartle()) * _state->getStartleFactor() * GLOBALS.STARTLE_THRESHOLD_DECAY;
+  if ((int16_t) getStartleThreshold() - (int16_t) delta < 0) {
+    setStartleThreshold(0);
+  } else {
+    setStartleThreshold((uint8_t) round(getStartleThreshold() - delta));
+  }
+  setLastStartle(millis());
 }
 
 bool Creature::_rxSetGlobals(uint8_t len, uint8_t* payload) {
@@ -201,41 +226,26 @@ bool Creature::_rxStart(uint8_t len, uint8_t* payload) {
     return false;
   }
   uint8_t mode = payload[0];
-  uint8_t stateId = payload[1];
-  // when there is a transition to happen
-  if (mode == 0x00) {
-    State* newState;
-    if (stateId == 0x00) {
-      uint8_t* states[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xFF};
-      int randState = rand() % 7;
-      stateId = states[randState];
+
+  Serial.print("Mode: ");Serial.println(mode);
+  if (mode) {
+    Serial.print("Transitioning to _prev (");Serial.print(_prev->getName());Serial.print(") ");Serial.println((uint32_t)_prev, HEX);
+    _transition(_prev); // TODO: Fix
+  } else {
+    uint8_t nextStateID = payload[1];
+    if (!nextStateID) {
+      nextStateID = rand() % 6 + 1;
     }
-    switch(stateId) {
-      case 0x01:  newState = new Ambient_1(*this);
-                  break;
-      case 0x03:  newState = new Ambient_2(*this);
-                  break;
-      case 0x05:  newState = new Ambient_3(*this);
-                  break;
-      case 0x02:  newState = new Active_1(*this);
-                  break;
-      case 0x04:  newState = new Active_2(*this);
-                  break;
-      case 0x06:  newState = new Active_3(*this);
-                  break;
-      case 0xFF:  newState = new Startle(*this);
-                  break;
-      case default:  dprintln("wrong state id");
-                  break;
-    }
-    setNextState(newState); // set _next
-    _transition(newState); // do the transition
+    _transition(getState(nextStateID));
   }
+
   return true;
 }
 
 bool Creature::_rxBroadcastStates(uint8_t len, uint8_t* payload) {
-  memcpy(this->_creatureStates, payload, len);
+  for (int i = 0; i < min(len, GLOBALS.NUM_CREATURES); i++) {
+    _creatureStates[i + 1] = payload[i];
+  }
   return true;
 }
 
@@ -346,6 +356,27 @@ void Creature::_pollRadio() {
   }
 }
 
+ State* Creature::getState(int id) {
+    switch (id) {
+      case 1:
+        return new Ambient1(*this);
+      case 2:
+        return new Active1(*this);
+      case 3:
+        return new Ambient2(*this);
+      case 4:
+        return new Active2(*this);
+      case 5:
+        return new Ambient3(*this);
+      case 6:
+        return new Active3(*this);
+      case 255:
+        return new Startle(*this);
+      default:
+        return new Wait(*this);
+    }
+  }
+
 void Creature::_transition(State* const state) {
   if (state == nullptr) {
     Serial.println("Cannot transition to null state!");
@@ -362,6 +393,12 @@ void Creature::_transition(State* const state) {
 
     _state = state;
 
+    if (state->getId() != WAIT && state->getId() != STARTLE) {
+      updateThreshold();
+    }
+
+
+
     if (_prev != nullptr && _prev != state) {
       // Delete the current _prev if it's not null, and it's not what we're currently transitioning to.
       delete _prev;
@@ -373,7 +410,6 @@ void Creature::_transition(State* const state) {
     // No need to transition, free this memory if it is not the same state.
     delete state;
   }
-
   _remainingRepeats = _state->getNumRepeats();
 }
 
