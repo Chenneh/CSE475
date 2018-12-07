@@ -5,12 +5,11 @@
 constexpr uint8_t Active3::_localWeights[];
 
 uint8_t Active3::getNumRepeats() {
- //return rand() % 5 + 4; // 4 - 8 repeats
- return 2;
+ return rand() % 5 + 1; // 1 - 5 repeats
 }
 
 void Active3::loop(uint32_t dt) {
-  Midi::setSound(3);
+  Midi::setSound(0x1F);
   Neopixel::setLight(5);
 }
 
@@ -19,5 +18,5 @@ const uint8_t* Active3::getLocalWeights() {
 }
 
 float Active3::getStartleFactor() {
-  return 0.010f;
+  return 0.001f;
 }

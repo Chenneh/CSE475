@@ -5,13 +5,12 @@
 constexpr uint8_t Ambient3::_localWeights[];
 
 uint8_t Ambient3::getNumRepeats() {
- //return rand() % 5 + 4; // 4 - 8 repeats
- return 2;
+ return rand() % 5 + 1; // 1 - 5 repeats
 }
 
 void Ambient3::loop(uint32_t dt) {
-  Midi::setSound(6);
-  Neopixel::setLight(2);
+  Midi::setSound(14);
+  Neopixel::setLight(10);
 }
 
 const uint8_t* Ambient3::getLocalWeights() {

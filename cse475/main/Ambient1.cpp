@@ -5,15 +5,12 @@
 constexpr uint8_t Ambient1::_localWeights[];
 
 uint8_t Ambient1::getNumRepeats() {
- //return rand() % 5 + 4; // 4 - 8 repeats
- return 2;
+ return rand() % 5 + 1; // 1 - 5 repeats
 }
 
 void Ambient1::loop(uint32_t dt) {
-  Midi::setSound(18);
-  //Sound * amSound1 = Midi::SOUNDS[26];
-  //int nodeNum = sizeof(amSound1->duration);
-  //Neopixel::yellow(1, nodeNum);
+  Midi::setSound(13);
+  Neopixel::setLight(9);
 }
 
 const uint8_t* Ambient1::getLocalWeights() {

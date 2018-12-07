@@ -17,7 +17,7 @@
 // TODO: put your kit number here
 #define KIT_NUM 7
 
-#define VERSION "1.5"
+#define VERSION "2.3"
 
 // Returns current battery voltage
 inline float getBatteryVoltage() {
@@ -27,25 +27,22 @@ inline float getBatteryVoltage() {
 
 Creature::Creature() {
   // Initialize _next to be the Wait state, so we will immediately transition into it on the first loop.
-  _next = new Ambient1(*this);
+  _next = getState(0);
   _prev = _state = nullptr;
-
-  if (KIT_NUM < 0) {
-    Serial.print(F("Invalid kit number: "));
-    Serial.println();
-    while (1);
-  }
 
   pinMode(ID_PIN, INPUT_PULLUP);
   _kitNum = KIT_NUM;
   _addr = 2 * KIT_NUM  - digitalRead(ID_PIN);
+  if (_kitNum <= 0) {
+    _addr = BROADCAST_ADDR;
+  }
 
   // Parens zero initialize
   _creatureDistances = new int8_t[GLOBALS.NUM_CREATURES + 1]();
   _creatureStates = new uint8_t[GLOBALS.NUM_CREATURES + 1]();
 
   _battery = getBatteryVoltage();
-  srand(_addr * (_battery * 100));
+  srand(_addr * ((int) (_battery * 100)));
 
   _lastStartle = millis();
   _lastLoop = millis();
@@ -61,23 +58,23 @@ void Creature::loop() {
   if (dt > GLOBALS.CYCLE_TIME) {
     _updateDisplay();
 
-    // Uncomment to see all the current states & distances for creatures
+    // Some helpful printlns
     /*for (int i = 0; i < GLOBALS.NUM_CREATURES + 1; i++) {
-      Serial.print(_creatureStates[i]);
-      Serial.print("\t");
+      dprint(_creatureStates[i]);
+      dprint("\t");
     }
-    Serial.println();
+    dprintln();
 
     for (int i = 0; i < GLOBALS.NUM_CREATURES + 1; i++) {
-      Serial.print(_creatureDistances[i]);
-      Serial.print("\t");
+      dprint(_creatureDistances[i]);
+      dprint("\t");
     }
-    Serial.println();*/
+    dprintln();
 
     dprint("Threshold: ");
     dprint(_startleThreshold);
     dprint("/");
-    dprintln("255");
+    dprintln("255");*/
 
     if (_next != NULL) {
       // We have a predefined next state, transition immediately
@@ -96,19 +93,20 @@ void Creature::loop() {
     _lastLoop = thisLoop;
   }
 
+  Neopixel::loop();
+
   // Poll PIR
   bool newPIR = digitalRead(PIR_PIN);
   if (newPIR && !_PIR) {
     // Rising edge trigger
+    dprintln(F("PIR triggered"));
     _state->PIR();
     _PIR = newPIR;
   } else if (!newPIR && _PIR) {
     // Falling edge
-    dprintln("PIR reset");
+    dprintln(F("PIR reset"));
     _PIR = newPIR;
   }
-
-  Neopixel::loop();
 }
 
 bool Creature::_rx(uint8_t pid, uint8_t srcAddr, uint8_t len, uint8_t* payload, int8_t rssi) {
@@ -216,7 +214,7 @@ bool Creature::_rxSetGlobals(uint8_t len, uint8_t* payload) {
 }
 
 void Creature::_rxStop() {
-  setNextState(new Wait(*this));
+  setNextState(getState(0));
 }
 
 bool Creature::_rxStart(uint8_t len, uint8_t* payload) {
@@ -227,9 +225,9 @@ bool Creature::_rxStart(uint8_t len, uint8_t* payload) {
   }
   uint8_t mode = payload[0];
 
-  Serial.print("Mode: ");Serial.println(mode);
+  Serial.print(F("Mode: "));Serial.println(mode);
   if (mode) {
-    Serial.print("Transitioning to _prev (");Serial.print(_prev->getName());Serial.print(") ");Serial.println((uint32_t)_prev, HEX);
+    Serial.print(F("Transitioning to _prev ("));Serial.print(_prev->getName());Serial.print(F(") "));Serial.println((uint32_t)_prev, HEX);
     _transition(_prev); // TODO: Fix
   } else {
     uint8_t nextStateID = payload[1];
@@ -373,7 +371,7 @@ void Creature::_pollRadio() {
       case 255:
         return new Startle(*this);
       default:
-        return new Wait(*this);
+        return new Wait(*this); // wait <-> ambient
     }
   }
 
@@ -397,8 +395,6 @@ void Creature::_transition(State* const state) {
       updateThreshold();
     }
 
-
-
     if (_prev != nullptr && _prev != state) {
       // Delete the current _prev if it's not null, and it's not what we're currently transitioning to.
       delete _prev;
@@ -406,7 +402,7 @@ void Creature::_transition(State* const state) {
 
     _txSendState(old == nullptr ? 0 : old->getId(), state->getId());
     _prev = old;
-  } else if (state != old){
+  } else if (state != old) {
     // No need to transition, free this memory if it is not the same state.
     delete state;
   }
@@ -416,35 +412,35 @@ void Creature::_transition(State* const state) {
 void Creature::_updateDisplay() {
   _battery = 0.95 * _battery + 0.05 * getBatteryVoltage();
 
-  oled.clearDisplay();
-  oled.setBattery(_battery);
-  oled.renderBattery();
+  _oled.clearDisplay();
+  _oled.setBattery(_battery);
+  _oled.renderBattery();
 
-  oled.setCursor(0, 0);
-  oled.print(_state ? _state->getName() : "None");
+  _oled.setCursor(0, 0);
+  _oled.print(_state ? _state->getName() : "None");
 
-  oled.setCursor(0, 11);
-  oled.print(F("TXRX:"));
-  oled.print(_txCount);
-  oled.print(F("/"));
-  oled.println(_rxCount);
+  _oled.setCursor(0, 11);
+  _oled.print(F("TXRX:"));
+  _oled.print(_txCount);
+  _oled.print(F("/"));
+  _oled.println(_rxCount);
 
-  oled.setCursor((OLED_WIDTH - 2 - (_addr > 9) - (_addr > 99) - sizeof(VERSION)) * 6, 11);
-  oled.print("#");
-  oled.print(_addr);
-  oled.print("v");
-  oled.print(VERSION);
+  _oled.setCursor((OLED_WIDTH - 2 - (_addr > 9) - (_addr > 99) - sizeof(VERSION)) * 6, 11);
+  _oled.print("#");
+  _oled.print(_addr);
+  _oled.print("v");
+  _oled.print(VERSION);
 
-  oled.setCursor(0, 22);
-  oled.print(F("Sound: "));
-  oled.print(Midi::getSound());
+  _oled.setCursor(0, 22);
+  _oled.print(F("Sound: "));
+  _oled.print(Midi::getSoundIdx());
 
   uint8_t lightIdx = Neopixel::getLight();
-  oled.setCursor((OLED_WIDTH - 8 - (lightIdx > 9) - (lightIdx > 99)) * 6, 22);
-  oled.print(F("Light: "));
-  oled.print(lightIdx);
+  _oled.setCursor((OLED_WIDTH - 8 - (lightIdx > 9) - (lightIdx > 99)) * 6, 22);
+  _oled.print(F("Light: "));
+  _oled.print(lightIdx);
 
-  oled.display();
+  _oled.display();
 }
 
 void Creature::setup() {
@@ -456,11 +452,11 @@ void Creature::setup() {
   delay(100);
   pinMode(LED_PIN, OUTPUT);
 
-  oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-  oled.display();
-  oled.clearDisplay();
-  oled.init();
-  oled.setBatteryVisible(true);
+  _oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
+  _oled.display();
+  _oled.clearDisplay();
+  _oled.init();
+  _oled.setBatteryVisible(true);
   _updateDisplay();
 
   Neopixel::setup();

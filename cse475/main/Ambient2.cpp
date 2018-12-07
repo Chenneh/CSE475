@@ -2,16 +2,16 @@
 #include "Debug.h"
 #include "Midi.h"
 
+
 constexpr uint8_t Ambient2::_localWeights[];
 
 uint8_t Ambient2::getNumRepeats() {
- //return rand() % 5 + 4; // 4 - 8 repeats
- return 2;
+ return rand() % 5 + 1; // 1 - 5 repeats
 }
 
 void Ambient2::loop(uint32_t dt) {
-  Midi::setSound(5);
-  Neopixel::setLight(4);
+  Midi::setSound(29);
+  Neopixel::setLight(6);
 }
 
 const uint8_t* Ambient2::getLocalWeights() {

@@ -16,7 +16,7 @@ protected:
   void PIR();
   void startled();
 private:
-  static constexpr uint8_t _localWeights[ACTIVE_STATES + AMBIENT_STATES] = { 1, 1, 1, 1, 1, 1 };
+  static constexpr uint8_t _localWeights[ACTIVE_STATES + AMBIENT_STATES] = { 0, 0, 0, 1, 1, 1 };
 };
 
 #endif  // _STARTLE_H_

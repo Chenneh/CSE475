@@ -1,6 +1,9 @@
 #include "Creature.h"
 #include "State.h"
 #include "Startle.h"
+#include "Midi.h"
+#include "Neopixel.h"
+#include "Debug.h"
 
 State::State(Creature& creature, char* const name, const uint8_t id) : _creature(creature), _id(id) {
   strncpy(_name, name, MAX_NAME_LEN);
@@ -15,75 +18,11 @@ char* State::getName() {
   return _name;
 }
 
-void State::playSound(uint8_t sound_idx) {
-  switch (sound_idx) {
-    case 0:
-      Serial.println("Playing sound 0...");
-      Midi::setSound(sound_idx + 1);
-    case 1:
-      Serial.println("Playing sound 1...");
-      Midi::setSound(sound_idx + 1);
-    case 2:
-      Serial.println("Playing sound 2...");
-      Midi::setSound(sound_idx + 1);
-    case 3:
-      Serial.println("Playing sound 3...");
-      Midi::setSound(sound_idx + 1);
-    case 4:
-      Serial.println("Playing sound 4...");
-      Midi::setSound(sound_idx + 1);
-    case 5:
-      Serial.println("Playing sound 5...");
-      Midi::setSound(sound_idx + 1);
-    case 6:
-      Serial.println("Playing sound 6...");
-      Midi::setSound(sound_idx + 1);
-    case 7:
-      Serial.println("Playing sound 7...");
-      Midi::setSound(sound_idx + 1);
-    default:
-      Serial.print("No sound of ID ");
-      Serial.println(sound_idx);
-  }
-}
-
-void State::playEffect(uint8_t effect_idx) {
-  switch (effect_idx) {
-    case 0:
-      Serial.println("Playing effect 0...");
-      Neopixel::setLight(effect_idx + 1);
-    case 1:
-      Serial.println("Playing effect 1...");
-      Neopixel::setLight(effect_idx + 1);
-    case 2:
-      Serial.println("Playing effect 2...");
-      Neopixel::setLight(effect_idx + 1);
-    case 3:
-      Serial.println("Playing effect 3...");
-      Neopixel::setLight(effect_idx + 1);
-    case 4:
-      Serial.println("Playing effect 4...");
-      Neopixel::setLight(effect_idx + 1);
-    case 5:
-      Serial.println("Playing effect 5...");
-      Neopixel::setLight(effect_idx + 1);
-    case 6:
-      Serial.println("Playing effect 6...");
-      Neopixel::setLight(effect_idx + 1);
-    case 7:
-      Serial.println("Playing effect 7...");
-      Neopixel::setLight(effect_idx + 1);
-    default:
-      Serial.print("No effect of ID ");
-      Serial.println(effect_idx);
-  }
-}
-
 bool State::rxPlaySound(uint8_t len, uint8_t* payload) {
   if (len < 1) {
     return false;
   }
-  playSound(payload[0]);
+  Midi::setSound(payload[0]);
   return true;
 }
 
@@ -91,7 +30,7 @@ bool State::rxPlayEffect(uint8_t len, uint8_t* payload) {
   if (len < 1) {
     return false;
   }
-  playEffect(payload[0]);
+  Neopixel::setLight(payload[0]);
   return true;
 }
 
@@ -137,7 +76,6 @@ void State::startled(uint8_t strength, uint8_t id) {
 }
 
 State* State::transition() {
-
   // Get total number of active creatures (i.e. they've recently communicated & are not in Wait or Startle)
   // Get the total number of creatures in each state
   // Get the total sum of the inverse absolute value of the RSSI
@@ -164,14 +102,15 @@ State* State::transition() {
     stateLikelihoods[i] = getLocalWeights()[i] + stateGlobalScalars[i] * distanceStateSums[i];
   }
 
-  Serial.print(stateLikelihoods[0]);
-  Serial.print("\t");
+  dprintln(F("State transition weights:"));
+  dprint(stateLikelihoods[0]);
+  dprint(F("\t"));
   for (uint8_t i = 1; i < ACTIVE_STATES + AMBIENT_STATES; i++) {
     stateLikelihoods[i] += stateLikelihoods[i - 1];
-    Serial.print(stateLikelihoods[i]);
-    Serial.print("\t");
+    dprint(stateLikelihoods[i]);
+    dprint(F("\t"));
   }
-  Serial.println();
+  dprintln();
 
   float randomVal = static_cast <float> (rand()) / ( static_cast <float> (RAND_MAX / (stateLikelihoods[ACTIVE_STATES + AMBIENT_STATES - 1])));
 
@@ -183,10 +122,10 @@ State* State::transition() {
     }
   }
 
-  Serial.print(randomVal);
-  Serial.print(" --> ");
-  Serial.println(stateID);
-
+  dprint(F("Generated "));
+  dprint(randomVal);
+  dprint(F(" -->  "));
+  dprintln(stateID);
 
   return _creature.getState(stateID);
 }
